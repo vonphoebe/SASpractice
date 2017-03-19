@@ -1,0 +1,91 @@
+
+*******************************************************************************
+*PROGRAM:  ABCD.SAS                                                           *
+*DESCRIPTION: By using expanded ABCD survey data to get population estimates  * 
+*             of RPTCTY(rectal/colorectal cancer) by risk factor variables    *  
+*PURPOSE: initial data sets created for request, ods needed for final table   *
+*******************************************************************************
+*Clear Output and Log Windows *
+*******************************;
+DM OUTPUT 'clear' continue; 
+DM LOG 'clear' continue; 
+*********************************
+*DEFINE SAS ENVIRONMENT OPTIONS *
+*********************************;
+OPTIONS PAGENO=1 NOFMTERR; 
+*********************************
+*DELETE DATASETS IN WORK LIBRARY*
+*********************************;
+PROC DATASETS LIB=WORK KILL NOLIST MEMTYPE=DATA; 
+QUIT;        
+
+%let datadir=&rootdir;
+libname expanded "&datadir";
+
+***page; 
+ods escapechar='^';
+footnote j=c 'page^{thispage} of ^{lastpage}'; 
+ 
+options nospool mprint;
+
+%Macro request(dataname, rfv, z);  
+%let lev=2; 
+proc sort data=&dataname;   by strata seqno; run; 
+proc crosstab data=&dataname design=strwr filetype=sas NOPRINT;
+  nest strata seqno  /psulev=2 missunit; 
+  weight _finalwt;   
+  tables  rptcty*&rfv;   
+  subgroup &rfv rptcty;  
+  levels   &lev    58;  
+  output smlcell /tablecell=default filename=smpledes filetype=sas replace; 
+run; 
+ 
+  proc transpose data=&dataname (obs=1 keep=&rfv) out=rd; run; 
+  data _null_; set rd; call symput('lchart',trim(_label_)); run; 
+
+  DATA rf&rfv (keep=&rfv dc nsum wsum rowper lowrow uprow SErow); 
+    retain dc &rfv nsum wsum rowper SErow lowrow uprow;  
+    SET smpledes;
+    format ROWPER LOWrow UProw serow 4.1 wsum 8.0;
+    CIrow2_ =put(LOWrow, 5.1)|| '-'||put(UProw, 5.1);
+      if ROWPER=100 then CIrow2_ ="";  
+    rowid=_n_;
+    dc=put(rowid, county_continue.); 
+    label dc='Demographic Groups';
+label &rfv ="&lchart";  
+    if serow >=5 then ROWPER=.;  /*When Row standard error >=5, suppress rowper*/  
+    if serow >=5 then CIrow2_="";/*When Row stadnard error>=5, suppress Confidence interval*/
+where &rfv=1; /*Only interest in "YES"*/ 
+  run; 
+
+proc sql NOPRINT;
+select compress(name||"=&z"||substr(name,1,7)) 
+into :ZRNAME separated by ' ' 
+from Dictionary.COLUMNS
+where libname="WORK" AND upcase(MEMNAME)="RF&rfv" and upcase(NAME) ne "DC";
+%put &ZRNAME; 
+quit; 
+
+data merged;
+ %if &z= z %then %do;
+set rf&rfv(rename=(&zrname)); 
+%end; 
+%else %do;
+merge merged rf&rfv(rename=(&zrname)); 
+%end; 
+run; 
+
+ %Mend request;
+%request(colo.expand_colo, _RFSMOK2,z);   /*Make sure variable NAME in UPCASE*/ 
+                                       /*NOTE: this is important, z will be the prefix for the first created data set*/  
+%request(colo.expand_colo, _OBESE, y); 
+%request(colo.expand_colo, _FLUSHOT3,x);
+
+%request(PA_EXPAND09,_FLSHOT3,W)
+%request(PA_EXPAND09,_PNEUMO2,V)
+%request(PA_EXPAND09,_HLTHPLN_W44,U)    
+%request(PA_EXPAND09,_NCHECK1_W44,T)
+%request(PA_EXPAND09,_DENVST_W44,S)
+%request(PA_EXPAND09,_RFBING3,R) 
+%request(PA_EXPAND09,FRQMENTD,Q)
+
