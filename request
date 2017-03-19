@@ -1,6 +1,6 @@
 
 *******************************************************************************
-*PROGRAM:  ABCD.SAS                                                           *
+*PROGRAM:  request.SAS                                                           *
 *DESCRIPTION: By using expanded ABCD survey data to get population estimates  * 
 *             of RPTCTY(rectal/colorectal cancer) by risk factor variables    *  
 *PURPOSE: initial data sets created for request, ods needed for final table   *
